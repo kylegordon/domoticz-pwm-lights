@@ -2,9 +2,6 @@
 # -*- coding: iso-8859-1 -*-
 # vim: tabstop=4 expandtab shiftwidth=4 softtabstop=4
 
-__author__ = "Kyle Gordon"
-__copyright__ = "Copyright (C) Kyle Gordon"
-
 import os
 import csv
 import logging
@@ -18,11 +15,14 @@ import mosquitto
 import ConfigParser
 import subprocess
 
+__author__ = "Kyle Gordon"
+__copyright__ = "Copyright (C) Kyle Gordon"
+
 # Read the config file
 config = ConfigParser.RawConfigParser()
 config.read("/etc/mqtt-pwm-lights/mqtt-pwm-lights.cfg")
 
-#Use ConfigParser to pick out the settings
+# Use ConfigParser to pick out the settings
 DEBUG = config.getboolean("global", "debug")
 LOGFILE = config.get("global", "logfile")
 MQTT_HOST = config.get("global", "mqtt_host")
@@ -202,66 +202,67 @@ def process_message(msg):
     What to do when the client recieves a message from the broker
     """
     logging.debug("Received: %s", msg.topic)
-    #if msg.topic == MQTT_TOPIC + "/state" and msg.payload == "?":
-    #    logging.info("State requested")
-    #    mqttc.publish(MQTT_TOPIC + "/state", str(get_pwm_value()))
+    # if msg.topic == MQTT_TOPIC + "/state" and msg.payload == "?":
+    #     logging.info("State requested")
+    #     mqttc.publish(MQTT_TOPIC + "/state", str(get_pwm_value()))
     if msg.topic == MQTT_TOPIC:
-	## Discover if it's valid JSON, or just a raw value
-	try:
-		data = json.loads(msg.payload)
-		logging.info("Message received : " + str(data))
-		try:
-			if data["idx"] == int(DOMOTICZ_IDX):
-				logging.info("IDX caught")
-				# Invert the PWM value due to the hardware requiring an inverted signal
-				#dimming requests :nvalue is 16, with attached svalue1 dim level
-				#off command: nvalue = 0, svalue1 = 0
-				#on command: nvalue = 1, svalue1 = 0
-				if int(data["nvalue"]) == 0:
-					# Turn it all off
-					logging.info("Turning off")
-					target_pwm = 512
-					change_pwm_value(target_pwm)
-				elif int(data["nvalue"]) == 1:
-					logging.info("Turning on")
-					target_pwm = 0
-					change_pwm_value(target_pwm)
-				elif int(data["nvalue"]) == 16:
-					logging.info("Dimming")
-					if 0 <= int(data["svalue1"]) <= 31:
-						target_pwm = 512 - (int(data["svalue1"]) * 16)
-						change_pwm_value(target_pwm)
-					else:
-						logging.info("Invalid Domoticz value")
-						return
-			else:
-				logging.info("Message not for me")
-		except TypeError:
-			logging.info("Typeerror")
-		        ## FIXME Check payload to ensure it's an integer
-		        target_pwm = int(msg.payload)
-			change_pwm_value(target_pwm)
+        # Discover if it's valid JSON, or just a raw value
+        try:
+            data = json.loads(msg.payload)
+            logging.info("Message received : " + str(data))
+            try:
+                if data["idx"] == int(DOMOTICZ_IDX):
+                    logging.info("IDX caught")
+                    # Invert the PWM value due to the hardware requiring an
+                    # inverted signal
+                    # dimming :nvalue is 16, with attached svalue1 dim level
+                    # off command: nvalue = 0, svalue1 = 0
+                    # on command: nvalue = 1, svalue1 = 0
+                    if int(data["nvalue"]) == 0:
+                        # Turn it all off
+                        logging.info("Turning off")
+                        target_pwm = 512
+                        change_pwm_value(target_pwm)
+                    elif int(data["nvalue"]) == 1:
+                        logging.info("Turning on")
+                        target_pwm = 0
+                        change_pwm_value(target_pwm)
+                    elif int(data["nvalue"]) == 16:
+                        logging.info("Dimming")
+                        if 0 <= int(data["svalue1"]) <= 31:
+                            target_pwm = 512 - (int(data["svalue1"]) * 16)
+                            change_pwm_value(target_pwm)
+                        else:
+                            logging.info("Invalid Domoticz value")
+                            return
+                else:
+                    logging.info("Message not for me")
+            except TypeError:
+                logging.info("Typeerror")
+                # FIXME Check payload to ensure it's an integer
+                target_pwm = int(msg.payload)
+                change_pwm_value(target_pwm)
+                pass
+            else:
+                logging.info("well, that failed")
+                return
+        except ValueError, e:
+            logging.info("not json")
+            return False
 
-			pass
-		else:
-			logging.info("well, that failed")
-			return
-  	except ValueError, e:
-		logging.info("not json")
-		return False
-	
+
 def change_pwm_value(target_pwm):
-        ## Do something with the new found value
-	logging.info("Changing PWM")
-        pwm_value = get_pwm_value()
-	logging.info("target_pwm is : %s, pwm_value is : %s",
-                          str(target_pwm),
-                          str(pwm_value))
-        while target_pwm != pwm_value:
-            logging.debug("target_pwm is : %s, pwm_value is : %s",
-                          str(target_pwm),
-                          str(pwm_value))
-            if target_pwm < pwm_value:
+    # Do something with the new found value
+    logging.info("Changing PWM")
+    pwm_value = get_pwm_value()
+    logging.info("target_pwm is : %s, pwm_value is : %s",
+                 str(target_pwm),
+                 str(pwm_value))
+    while target_pwm != pwm_value:
+        logging.debug("target_pwm is : %s, pwm_value is : %s",
+                      str(target_pwm),
+                      str(pwm_value))
+        if target_pwm < pwm_value:
                 pwm_value = pwm_value - 5
                 if target_pwm > pwm_value - 5:
                     pwm_value = target_pwm
@@ -270,20 +271,19 @@ def change_pwm_value(target_pwm):
                 command = "/usr/local/bin/gpio -g pwm " + str(PIN) + " " + str(pwm_value)
                 logging.debug("Executing : %s", command)
                 subprocess.check_output(command, shell=True)
-            if target_pwm > pwm_value:
-                pwm_value = pwm_value + 5
-                if target_pwm < pwm_value + 5:
-                    pwm_value = target_pwm
-                    time.sleep(1)
-                    set_pwm_value(pwm_value)
-                command = "/usr/local/bin/gpio -g pwm " + str(PIN) + " " + str(pwm_value)
-                logging.debug("Executing : %s", command)
-                subprocess.check_output(command, shell=True)
+        if target_pwm > pwm_value:
+            pwm_value = pwm_value + 5
+            if target_pwm < pwm_value + 5:
+                pwm_value = target_pwm
+                time.sleep(1)
+                set_pwm_value(pwm_value)
+            command = "/usr/local/bin/gpio -g pwm " + str(PIN) + " " + str(pwm_value)
+            logging.debug("Executing : %s", command)
+            subprocess.check_output(command, shell=True)
             logging.info("Finished - target_pwm is : %s, pwm_value is : %s",
-                     str(target_pwm),
-                     str(pwm_value))
+                         str(target_pwm),
+                         str(pwm_value))
         mqttc.publish(MQTT_TOPIC + "/state", str(pwm_value))
-
 
 
 def get_pwm_value():
@@ -324,7 +324,7 @@ def set_pwm_value(pwm_value):
 signal.signal(signal.SIGTERM, cleanup)
 signal.signal(signal.SIGINT, cleanup)
 
-#connect to broker
+# connect to broker
 connect()
 
 # Try to loop_forever until interrupted
